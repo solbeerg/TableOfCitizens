@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html> 
+<head>  
+    <link rel="stylesheet" type="text/css" href="stylesheet.css" media="screen"/>
+    <meta charset="utf-8">
+</head>
+<body>
+    <div id="listDiv" class="header">
+        <h2>List of countries</h2>
+        <input type="text" id="userInput" placeholder="Country" />
+        <span onclick="addCountry()" class="addBtn">Add</span>
+        <input type="text" id="userSearch" placeholder="Search" oninput="search()" />
+    </div>
+
+    <ul id="CountryList">
+        <li><a>Norway</a></li>
+        <li><a>China</a></li>
+        <li><a>Germany</a></li>
+        <li><a>India</a></li>
+    </ul>
+    <script>
+        let supportedCountries = [];
+        let countryData = [];
+        initApp()
+
+        async function initApp(){
+            //localStorage.clear();
+            populateList();
+            await addInitPop();
+        }
+        // fetches a list of all supported countries
+        async function fetchCountries(){
+            console.log('Fetching list of supported countries');
+            // Fetch a list of countries supported for population count
+            var response = await fetch('https://d6wn6bmjj722w.population.io/1.0/countries/');
+            var countries = await response.json();
+            supportedCountries = await countries.countries;
+            return await countries.countries;
+        }
+        // fetches the specified countries population today and tomorrow
+        async function fetchCountryPopulation(country){
+            console.log("Fetching population data for: ", country);
+            // Fetch population for desired country
+            var response = await fetch('https://d6wn6bmjj722w.population.io/1.0/population/' + country + '/today-and-tomorrow/');
+            var population = await response.json();
+            return await population.total_population;
+        }
+        // Adds population for the initial data
+        async function addInitPop(){
+            // Adds population count to countries in list
+            var listOfCountries = document.getElementsByTagName('a');
+            var supportedCountries = await fetchCountries();
+            for (let i = 0; i < listOfCountries.length; i++) {
+                let a = listOfCountries[i];
+                await addPopulationCount(supportedCountries, a);
+            }
+        }
+        // Adds the population count for the inputed a
+        async function addPopulationCount(supportedCountries, a){
+            if(isSupported(supportedCountries, a.textContent)){
+                var p = document.createElement('p');
+                var pop = await fetchCountryPopulation(a.textContent);
+                p.innerHTML = "- " + pop[0].population.toLocaleString();
+                var li = a.parentElement;
+                addPopulationData(a, pop);
+                li.appendChild(p);
+            } 
+        }
+
+        // Stores population data in array.
+        function addPopulationData(a, data){
+            let diff = data[1].population - data[0].population;
+            let countryPop = {
+                "country": a.textContent,
+                "todaysPop": data[0].population,
+                "tomorrowsPop": data[1].population,
+                "rate": diff / 86400
+            };
+            countryData.push(countryPop);
+        }
+
+        // Check if input is present in the supported country array
+        function isSupported(supportedCountries, country){
+            if(supportedCountries.includes(country)){
+                return true;
+            } else {
+                return false;
+            }
+        }
+        // remove item from local list
+        function removeItem(item){
+            var offlineList = getOfflineList()
+            for (var i = 0; i < offlineList.length; i++) {
+                if(item == offlineList[i]){
+                    offlineList.splice(i)
+                    console.log("tried to remove: " + item)
+                }
+            }
+            storeOfflineList(offlineList);
+        }
+        // add item to local list
+        function addItem(item){
+            var offlineList = getOfflineList();
+            offlineList.push(item);
+            storeOfflineList(offlineList)
+        }
+        // stores list locally
+        function storeOfflineList(list) {
+            if(list.length > 0){
+                localStorage.setItem('list', JSON.stringify(list));
+            } else {
+                localStorage.setItem('list', JSON.stringify([]));
+            }
+        } 
+        // Returnes locally stored list
+        function getOfflineList(){
+            var list = localStorage.getItem('list');
+            if(list !== null){
+                return JSON.parse(list);
+            } else {
+                return [];
+            }
+        }
+        // Returnes array with country name based of a-elements.
+        function getArrayFromList(){
+            let arr = []
+            var listOfElements = document.getElementsByTagName('a');
+            for (let i = 0; i < listOfElements.length; i++) {
+                var item = listOfElements[i].textContent;
+                arr.push(item);
+            }
+            //console.log(arr);
+            return arr;
+        }
+
+        // Create a new list item when clicking on the "Add" button
+        function addCountry() {
+
+            // todo: Add check if country is supported by API
+            var list = document.getElementsByTagName('li');
+            var li = document.createElement('li');
+            var inputValue = document.getElementById("userInput").value;
+            var t = document.createTextNode(inputValue);
+            var a = document.createElement('a');
+            if(isSupported(supportedCountries, inputValue)){
+                addItem(inputValue);
+                a.appendChild(t);
+                addPopulationCount(supportedCountries, a);
+                li.appendChild(a);
+                //Removes user input after its added to the list, and resets to "Country"
+                document.getElementById("userInput").value = "";
+
+                var container = document.createElement("SPAN");
+                var text = document.createTextNode("\u274C");
+                container.className = "close";
+                container.appendChild(text);
+                li.appendChild(container);
+                //console.log("list length: ", list.length);
+                container.onclick = function() {
+                    var div = this.parentElement;
+                    //div.style.display = "none";
+                    var list = document.getElementById("CountryList");
+                    removeItem(inputValue);
+                    list.removeChild(div);
+                    storeOfflineList(getArrayFromList());
+                }
+
+                //Checks if input field is empty
+                if (inputValue === '') {
+                    alert("No input!");
+                } else {
+                    document.getElementById("CountryList").appendChild(li);
+                    storeOfflineList(getArrayFromList());
+                }
+            } else {
+                alert('Country is not in our list :(');
+            }
+        }
+        // Populates the list with data. Either from localStorage or dummy data.
+        function populateList(){
+            var offlineList = getOfflineList();
+            if(offlineList && offlineList.length){
+                if(offlineList.length > 0){
+                    var ul = document.getElementById("CountryList");
+                    if(ul){
+                        while(ul.firstChild){
+                            ul.removeChild(ul.firstChild);
+                        }
+                    }
+                    //console.log("list returned: ", getOfflineList());
+                    //console.log("list length: ", offlineList.length);
+                    for (let i = 0; i < offlineList.length; i++) {
+                        var li = document.createElement('li');
+                        var a = document.createElement('a')
+                        a.textContent = offlineList[i];
+                        //addPopulationCount(supportedCountries, a);
+                        li.appendChild(a);
+                        document.getElementById("CountryList").appendChild(li);
+                    }
+                    //console.log("Added list from memory");
+                }
+            } else {
+                console.log("No list in memory");
+                storeOfflineList(getArrayFromList());
+            }
+        }
+        // Updates list elements based on what is searched.
+        function search(){
+            //console.log('searching for country...');
+            var input, ul, li, i, result;
+            input = document.getElementById('userSearch');
+            filter = input.value.toUpperCase();
+            ul = document.getElementById("CountryList");
+            li = ul.getElementsByTagName('li');
+            a = ul.getElementsByTagName('a')
+            result = searchFor(getArrayFromList(), filter);
+
+            for (i = 0; i < li.length; i++) {
+                if(result.includes(a[i].textContent)){
+                    li[i].style.display = "";
+                } else {
+                    li[i].style.display = "none";
+                }
+            }
+        }
+        // Filters out the countries not matching searchword
+        function searchFor(countries, searchWord){
+            var filter = searchWord.toUpperCase();
+            var result = countries.filter(country => searchElement(country, filter));
+            return result;
+        }
+        // checks if elem starts with the searchword
+        function searchElement(elem, searchWord){
+            if(elem.toUpperCase().startsWith(searchWord.toUpperCase())){
+                return true;
+            } else {
+                return false;
+            }
+        }
+    </script> 
+    <script>
+
+        // Every element gets a close button on the right side
+        var listOfElements = document.getElementsByTagName('li');
+        for (let i = 0; i < listOfElements.length; i++) {
+            var container = document.createElement('span');
+            //u274C is the UTF code for the remove sign
+            var text = document.createTextNode("\u274C");
+            container.className = "close";
+            container.appendChild(text);
+            listOfElements[i].appendChild(container);
+        }
+
+        // Click on a close button to hide the current list item
+        var close = document.getElementsByClassName("close");
+        for (let i = 0; i < close.length; i++) {
+            close[i].onclick = function() {
+                var div = this.parentElement;
+                //div.style.display = "none";
+                var list = document.getElementById("CountryList");
+                removeItem(div.textContent.replace('❌', ""));
+                list.removeChild(div);
+                storeOfflineList(getArrayFromList());
+            }
+        }
+
+        // Updates the population for all countries in list every second.
+        var a = document.getElementsByTagName('a');
+        setInterval(async function(){
+            for (let i = 0; i < a.length; i++) {
+                var country = a[i].textContent
+                var pop;
+                // finding population data in countryData array
+                for (let j = 0; j < countryData.length; j++) {
+                    const item = countryData[j];
+                    if(item.country == country){
+                        pop = item;
+                    }
+                }
+                var li = a[i].parentElement;
+                var p = document.createElement('p');
+                var div = document.createElement('div');
+                div.style.display = "none";
+                var oldValue = 0;
+                var value = 0;
+                var newPop = 0;
+                var rate = 0;
+
+                // Checks if high precision number is available in div, if so use it instead.
+                if(li.lastChild.nodeName == "DIV"){
+                    oldValue = li.lastChild.innerHTML;
+                    value = parseFloat(oldValue);
+                    if(pop && pop.rate){
+                        rate = pop.rate;
+                    }
+                    newPop = value + rate;
+                    div.innerHTML = newPop;
+                    var oldDiv = li.getElementsByTagName('div')[0];
+                    li.replaceChild(div, oldDiv);
+                } else {
+                    oldValue = li.lastChild
+                    // Extracts value from the orginial heavily formaten population number
+                    value = parseFloat(oldValue.textContent.substring(2).replace(/\s/g, ""));
+                    if(pop && pop.rate){
+                        rate = pop.rate;
+                    }
+                    newPop = value + rate;
+                    div.innerHTML = newPop;
+                    li.appendChild(div);
+                }
+
+                var oldp = li.getElementsByTagName('p')[0];
+
+                // Formats the new population value to a more representable version
+                // without decimals and with spaces for every thousand
+                p.innerHTML = "- " + parseInt(newPop.toFixed(0)).toLocaleString();
+                li.replaceChild(p, oldp);
+
+                /* console.log("Country: ", country);
+                console.log("current value: ", value);
+                console.log("today pop: ", pop[0].population);
+                console.log("tomorrow pop: ", pop[1].population);
+                console.log("diff: ", diff);
+                console.log("Rate: ", rate); */
+            }
+        }, 1000)
+    </script>
+</body>
+</html>
